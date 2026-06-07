@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node Server Manager</title>
+<link rel="stylesheet" href="style.css?v=10">
+</head>
+<body>
+
+<!-- ===================== AUTH GATE ===================== -->
+<div class="auth" id="auth">
+  <div class="auth-card">
+    <div class="auth-brand"><span class="wm">Server Manager</span><span class="ver">v1.0</span></div>
+
+    <!-- login -->
+    <form id="loginForm" class="auth-form" autocomplete="off">
+      <h2 id="loginTitle">Sign in</h2>
+      <p class="auth-sub" id="loginSub">Log in to manage your servers.</p>
+      <label>Username</label>
+      <input class="inp" id="loginUser" placeholder="username" autocomplete="username">
+      <label>Password</label>
+      <input class="inp" id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
+      <div class="auth-err" id="loginErr"></div>
+      <button class="btn-go full" type="submit" id="loginBtn">Sign in</button>
+    </form>
+
+    <!-- first-run setup -->
+    <form id="setupForm" class="auth-form" style="display:none" autocomplete="off">
+      <h2>Create admin account</h2>
+      <p class="auth-sub">First run — create the administrator account for this panel.</p>
+      <label>Username</label>
+      <input class="inp" id="setupUser" placeholder="admin" autocomplete="username">
+      <label>Password</label>
+      <input class="inp" id="setupPass" type="password" placeholder="at least 4 characters" autocomplete="new-password">
+      <label>Confirm password</label>
+      <input class="inp" id="setupPass2" type="password" placeholder="repeat password" autocomplete="new-password">
+      <div class="auth-err" id="setupErr"></div>
+      <button class="btn-go full" type="submit">Create account &amp; continue</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div class="app" id="app" style="display:none">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="side">
+    <div class="brand">
+      <div class="name"><b>Server Manager</b></div>
+      <span class="ver">v1.0</span>
+    </div>
+
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input placeholder="Search servers…" id="searchBox" oninput="filterTree(this.value)">
+    </div>
+
+    <div class="ws">
+      <div class="ws-item" id="raNav" onclick="showRemote()">
+        <div class="wi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg></div>
+        <div class="wt">Remote access &amp; users<small id="raNavSub">panel online</small></div>
+        <span class="wdot on" id="raNavDot"></span>
+      </div>
+    </div>
+    <div class="ws-sep"></div>
+
+    <nav class="tree" id="tree"></nav>
+
+    <div class="side-foot">
+      <button class="btn-new" onclick="openModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        New server
+      </button>
+      <button class="btn-ico" title="Account" onclick="showRemote()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg>
+      </button>
+    </div>
+    <div class="side-user" id="sideUser">
+      <span class="su-name" id="suName">—</span>
+      <button class="su-out" onclick="doLogout()">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <section class="main">
+
+    <!-- header: server mode -->
+    <header class="top" id="hdrServer">
+      <div class="id">
+        <h1 id="srvName">—</h1>
+        <span class="crumb" id="srvCrumb"></span>
+        <span class="pill idle" id="srvPill"><span class="dot"></span><span id="srvState">STOPPED</span></span>
+      </div>
+      <div class="actions">
+        <button class="ctl" id="btnRestart" onclick="ctlRestart()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Restart</button>
+        <button class="ctl stop" id="btnStop" onclick="ctlToggle()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop</button>
+        <button class="ctl primary" onclick="showRemote()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg>Remote access</button>
+      </div>
+    </header>
+
+    <!-- header: remote mode -->
+    <header class="top" id="hdrRemote" style="display:none">
+      <div class="id">
+        <div class="gicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg></div>
+        <h1>Remote access &amp; users</h1>
+        <span class="pill online" id="raPill"><span class="dot online"></span><span>PANEL ONLINE</span></span>
+      </div>
+      <div class="actions">
+        <button class="ctl" onclick="backToServer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to server</button>
+      </div>
+    </header>
+
+    <!-- server tabs -->
+    <nav class="tabs" id="serverTabs">
+      <button class="tab active" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</button>
+      <button class="tab" data-tab="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>Console<span class="badge" id="conBadge" style="display:none">0</span></button>
+      <button class="tab" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 3h.1A2 2 0 1 1 13 3v.1A1.6 1.6 0 0 0 17 4.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21 9v.1a2 2 0 1 1 0 4z" stroke-width="1.4"/></svg>Settings</button>
+    </nav>
+
+    <div class="view" id="view">
+
+      <!-- ---------- OVERVIEW ---------- -->
+      <div class="panel-page show" data-page="overview">
+        <div class="empty" id="emptyState" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="4" width="18" height="8" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 8h.01M7 17h.01"/></svg>
+          <h3>No servers yet</h3>
+          <p>Add your first Node.js server to start managing it.</p>
+          <button class="btn-go" onclick="openModal()">＋ New server</button>
+        </div>
+
+        <div id="overviewBody">
+          <div class="stats">
+            <div class="stat accent">
+              <div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Uptime</div>
+              <div class="v" id="upBig">0d 00:00:00</div>
+              <div class="sub" id="upSince">not running</div>
+            </div>
+            <div class="stat">
+              <div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>CPU</div>
+              <div class="v" id="cpuBig">0<small>%</small></div>
+              <div class="sub" id="cpuSub">process usage</div>
+            </div>
+            <div class="stat">
+              <div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 6v12M11 6v12M15 6v12"/></svg>Memory</div>
+              <div class="v" id="memBig">0<small>MB</small></div>
+              <div class="sub" id="memSub">resident set</div>
+            </div>
+            <div class="stat">
+              <div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg>Restarts</div>
+              <div class="v" id="reqBig">0</div>
+              <div class="sub">since app start</div>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="card">
+              <div class="card-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Live resources<span class="more">now</span></div>
+              <div class="card-b">
+                <div class="meter">
+                  <div class="top-r"><span class="lab">CPU</span><span class="num" id="cpuM">0%</span></div>
+                  <div class="bar"><i id="cpuBar" style="width:0%"></i></div>
+                </div>
+                <div class="meter">
+                  <div class="top-r"><span class="lab">Memory</span><span class="num" id="memM">0 MB</span></div>
+                  <div class="bar mem"><i id="memBar" style="width:0%"></i></div>
+                </div>
+                <div class="meter">
+                  <div class="top-r"><span class="lab">State</span><span class="num" id="stateM">stopped</span></div>
+                  <div class="bar"><i id="stateBar" style="width:0%"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>Recent activity</div>
+              <div class="card-b" id="activity"></div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:14px">
+            <div class="card-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg>Process<span class="more" id="procPort">no port</span></div>
+            <div class="card-b" style="padding:14px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:18px">
+              <div><div style="font-size:11px;color:var(--ink-3);margin-bottom:5px">Start command</div><div style="font-family:var(--mono);font-size:12.5px;color:var(--acc)" id="procCmd">—</div></div>
+              <div><div style="font-size:11px;color:var(--ink-3);margin-bottom:5px">Working dir</div><div style="font-family:var(--mono);font-size:12.5px" id="procCwd">—</div></div>
+              <div><div style="font-size:11px;color:var(--ink-3);margin-bottom:5px">PID</div><div style="font-family:var(--mono);font-size:12.5px" id="procPid">—</div></div>
+              <div><div style="font-size:11px;color:var(--ink-3);margin-bottom:5px">Node version</div><div style="font-family:var(--mono);font-size:12.5px" id="procNode">—</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- CONSOLE ---------- -->
+      <div class="panel-page" data-page="console">
+        <div class="term-wrap">
+          <div class="term-bar">
+            <div class="lights"><i></i><i></i><i></i></div>
+            <span class="t" id="termTitle">stdout/stderr</span>
+            <div class="term-tools">
+              <button onclick="clearConsole()">clear</button>
+            </div>
+            <span class="live"><i></i>streaming</span>
+          </div>
+          <div class="term" id="term"></div>
+          <div class="term-input">
+            <span class="pmt" id="termPmt">$</span>
+            <input placeholder="console is read-only — stdout/stderr of the process" id="termIn" disabled>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- SETTINGS ---------- -->
+      <div class="panel-page" data-page="settings">
+        <div class="set-grid">
+
+          <div class="set-sec">
+            <div class="sec-t">Resilience</div>
+            <div class="opt">
+              <div class="meta"><div class="ot">Auto-restart on crash</div><div class="od">Bring the process back up automatically if it exits with a non-zero code.</div></div>
+              <div class="tog" id="setAuto" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="opt">
+              <div class="meta"><div class="ot">Start on app launch</div><div class="od">Launch this server automatically when the manager starts.</div></div>
+              <div class="tog" id="setBoot" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="opt">
+              <div class="meta"><div class="ot">Crash backoff</div><div class="od">Max restart attempts before holding in a failed state.</div></div>
+              <div class="seg" id="setBackoff" style="width:230px">
+                <button data-v="3">3×</button><button data-v="5" class="on">5×</button><button data-v="10">10×</button><button data-v="∞">∞</button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="sec-t">Runtime</div>
+            <div class="field"><label>Start command</label><input class="inp" id="setCmd" placeholder="npm start"></div>
+            <div class="field"><label>Working directory</label><input class="inp" id="setCwd" placeholder="C:\path\to\project"></div>
+            <div class="row2">
+              <div class="field"><label>Port (sets <code>PORT</code> env)</label><input class="inp" id="setPort" placeholder="3000"></div>
+              <div class="field"><label>Folder</label><input class="inp" id="setFolder" placeholder="Default"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="sec-t">Environment variables</div>
+            <div id="envList"></div>
+            <button class="add-env" onclick="addEnvRow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg>Add variable</button>
+          </div>
+
+          <div class="set-sec" style="display:flex;gap:10px;margin-top:6px;padding-top:14px;border-top:1px solid var(--line-soft)">
+            <button class="btn-go" onclick="saveSettings()">Save changes</button>
+            <button class="btn-ghost" onclick="paintServer(current)">Discard</button>
+            <div style="flex:1"></div>
+            <button class="btn-ghost" style="color:var(--crash);border-color:rgba(251,113,133,.3)" onclick="deleteServer()">Delete server</button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ---------- REMOTE ACCESS + USERS ---------- -->
+      <div class="panel-page" data-page="remote">
+
+        <div class="ra-hero live" id="raHero">
+          <div class="ra-top">
+            <div class="big-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/></svg></div>
+            <div>
+              <h2>Reach this panel from anywhere</h2>
+              <p>The panel is served on the local port below. Connect to this machine over <b>Remote Desktop</b> (or your LAN) and open that address in a browser to manage every server — protected by the login screen. Keep this port free on the host so it stays reachable.</p>
+            </div>
+          </div>
+
+          <div class="ra-live">
+            <div class="ra-grid">
+              <div class="urlbar-wrap">
+                <label>Panel address (keep this port free)</label>
+                <div class="urlbar">
+                  <span class="lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+                  <span class="u">http://localhost:<b id="raPort">8800</b></span>
+                  <span class="acts">
+                    <button title="Copy" onclick="copyUrl()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                    <button title="Open" onclick="window.open('http://localhost:'+CFG.port,'_blank')">Open</button>
+                  </span>
+                </div>
+                <div class="ra-meta">
+                  <div class="m"><div class="l">Status</div><div class="vv"><span class="dot online"></span>Online</div></div>
+                  <div class="m"><div class="l">Host port</div><div class="vv" id="raMetaPort">8800</div></div>
+                  <div class="m"><div class="l">Users</div><div class="vv" id="raMetaUsers">0</div></div>
+                  <div class="m"><div class="l">Login</div><div class="vv"><span class="dot online"></span>Required</div></div>
+                </div>
+              </div>
+              <div class="portbox">
+                <label>Change panel port</label>
+                <div class="row2" style="margin-top:8px">
+                  <input class="inp" id="cfgPort" placeholder="8800" style="font-family:var(--mono)">
+                  <button class="btn-go" onclick="savePort()">Apply</button>
+                </div>
+                <div class="help">Takes effect after you restart the app. Pick a port nothing else uses.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="note" id="raFirewall">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <div class="nt">For access from other devices on your network, allow the port through the host firewall: <code id="fwCmd">netsh advfirewall firewall add rule name="ServerManager" dir=in action=allow protocol=TCP localport=8800</code></div>
+        </div>
+
+        <!-- user management -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg>Users<span class="more" id="userCount">0</span></div>
+          <div class="exp-add" id="addUserRow">
+            <div class="field grow"><label>Username</label><input class="inp" id="newUser" placeholder="teammate" style="font-family:var(--sans)"></div>
+            <div class="field grow"><label>Password</label><input class="inp" id="newPass" type="password" placeholder="min 4 chars"></div>
+            <div class="field sf"><label>Role</label>
+              <select class="inp" id="newRole" style="font-family:var(--sans)"><option value="user">User</option><option value="admin">Admin</option></select>
+            </div>
+            <button class="ctl primary" style="height:39px" onclick="addUser()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add user</button>
+          </div>
+          <div class="auth-err" id="userErr" style="margin:0 16px"></div>
+          <div class="card-b" style="padding:0" id="userList"></div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- ===================== ADD SERVER MODAL ===================== -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <div class="modal-h">
+      <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="8" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 8h.01M7 17h.01"/></svg></div>
+      <div><h3>Add a Node server</h3><p>Point the manager at a project directory and start command.</p></div>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-b">
+      <div class="field"><label>Server name</label><input class="inp" id="mName" placeholder="my-service" style="font-family:var(--sans)"></div>
+      <div class="row2">
+        <div class="field"><label>Folder</label><input class="inp" id="mFolder" placeholder="Default" style="font-family:var(--sans)"></div>
+        <div class="field"><label>Port (optional)</label><input class="inp" id="mPort" placeholder="3000"></div>
+      </div>
+      <div class="field"><label>Project directory</label><input class="inp" id="mCwd" placeholder="C:\path\to\project"><div class="help">The folder containing your package.json.</div></div>
+      <div class="field"><label>Start command</label><input class="inp" id="mCmd" value="npm start"></div>
+
+      <div class="sec-t" style="margin-top:16px">On create</div>
+      <div class="opt" style="padding:11px 14px">
+        <div class="meta"><div class="ot">Auto-restart on crash</div><div class="od">Recommended for anything user-facing.</div></div>
+        <div class="tog on" id="mAuto" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div class="opt" style="padding:11px 14px">
+        <div class="meta"><div class="ot">Start immediately</div><div class="od">Boot the process as soon as it's added.</div></div>
+        <div class="tog on" id="mStart" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div class="auth-err" id="mErr"></div>
+    </div>
+    <div class="modal-f">
+      <div class="sp"></div>
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-go" onclick="createServer()">Create server</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js?v=10"></script>
+</body>
+</html>
