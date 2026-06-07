@@ -1,6 +1,3 @@
-/* ============================================================
-   server.js — Express app: serves the panel + login + REST API
-   ============================================================ */
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
@@ -24,7 +21,6 @@ function buildApp() {
     cookie: { httpOnly: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 12 },
   }));
 
-  /* ---------- auth helpers ---------- */
   const requireAuth = (req, res, next) => {
     if (req.session && req.session.userId) return next();
     return res.status(401).json({ error: 'not authenticated' });
@@ -34,7 +30,6 @@ function buildApp() {
     return res.status(403).json({ error: 'admin only' });
   };
 
-  /* ---------- auth routes ---------- */
   app.get('/api/state', (req, res) => {
     res.json({
       hasUsers: store.getUsers().length > 0,
@@ -47,7 +42,6 @@ function buildApp() {
     });
   });
 
-  // first-run: create the first admin (only allowed when no users exist)
   app.post('/api/setup', async (req, res) => {
     if (store.getUsers().length > 0) return res.status(403).json({ error: 'already configured' });
     const { username, password } = req.body || {};
@@ -76,7 +70,6 @@ function buildApp() {
     req.session.destroy(() => res.json({ ok: true }));
   });
 
-  /* ---------- users (admin) ---------- */
   app.get('/api/users', requireAuth, (req, res) => {
     res.json(store.getUsers().map(u => ({ id: u.id, username: u.username, role: u.role, createdAt: u.createdAt })));
   });
@@ -99,7 +92,6 @@ function buildApp() {
     res.json({ ok: true });
   });
 
-  /* ---------- config ---------- */
   app.get('/api/config', requireAuth, (req, res) => res.json(store.getConfig()));
   app.put('/api/config', requireAuth, requireAdmin, (req, res) => {
     const patch = {};
@@ -107,7 +99,6 @@ function buildApp() {
     res.json(store.setConfig(patch));
   });
 
-  /* ---------- servers ---------- */
   const withStatus = s => Object.assign({}, s, pm.status(s.id));
 
   app.get('/api/servers', requireAuth, (req, res) => {
@@ -151,15 +142,12 @@ function buildApp() {
     res.json({ ok: true });
   });
 
-  /* ---------- static panel ---------- */
   app.use(express.static(PUBLIC));
-  // SPA-ish fallback: any non-api route serves index.html (gate handled client-side)
   app.get(/^\/(?!api).*/, (req, res) => res.sendFile(path.join(PUBLIC, 'index.html')));
 
   return app;
 }
 
-/* poll real process stats every 2s */
 let statsTimer = null;
 function startServer(port) {
   const app = buildApp();
@@ -171,7 +159,6 @@ function startServer(port) {
 
 module.exports = { buildApp, startServer };
 
-/* allow running standalone: node src/server.js */
 if (require.main === module) {
   store.init();
   startServer();

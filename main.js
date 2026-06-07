@@ -1,8 +1,3 @@
-/* ============================================================
-   main.js — Electron entry. Boots the local panel server and
-   opens it in a desktop window. The same http://localhost:PORT
-   is what you reach over Remote Desktop (keep that port free).
-   ============================================================ */
 require('dotenv').config();
 const { app, BrowserWindow, shell, dialog } = require('electron');
 const path = require('path');
@@ -32,7 +27,6 @@ function createWindow() {
 
   win.loadURL('http://localhost:' + PORT);
 
-  // open external links in the system browser, keep app links in-window
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://localhost:' + PORT)) return { action: 'allow' };
     shell.openExternal(url);
@@ -43,7 +37,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // persist data under the OS user-data dir so it survives updates
   store.init(path.join(app.getPath('userData'), 'data'));
   PORT = store.getConfig().port || 8800;
 
@@ -72,6 +65,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  // tear down any servers we started so nothing is left orphaned
   try { pm.stopAll(); } catch (e) {}
 });

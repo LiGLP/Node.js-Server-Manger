@@ -1,6 +1,3 @@
-/* ============================================================
-   store.js — tiny JSON-file persistence for servers + users
-   ============================================================ */
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -42,7 +39,6 @@ function save() {
   }
 }
 
-/* Point persistence at a custom directory (Electron userData). */
 function init(dir) {
   const targetDir = dir || process.env.NSM_DATA_DIR;
   if (targetDir) {
@@ -55,7 +51,6 @@ function init(dir) {
 
 const id = () => crypto.randomBytes(6).toString('hex');
 
-/* ---------------- servers ---------------- */
 function getServers() { return db.servers; }
 function getServer(sid) { return db.servers.find(s => s.id === sid); }
 function addServer(s) {
@@ -92,7 +87,6 @@ function removeServer(sid) {
   return true;
 }
 
-/* ---------------- users ---------------- */
 function getUsers() { return db.users; }
 function getUserByName(name) {
   return db.users.find(u => u.username.toLowerCase() === String(name).toLowerCase());
@@ -117,7 +111,6 @@ function removeUser(uid) {
   return true;
 }
 
-/* ---------------- config ---------------- */
 function getConfig() { return db.config; }
 function setConfig(patch) { Object.assign(db.config, patch); save(); return db.config; }
 

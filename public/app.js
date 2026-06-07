@@ -1,6 +1,3 @@
-/* ============================================================
-   app.js — frontend for Node Server Manager (talks to REST API)
-   ============================================================ */
 const MID = '·', DASH = '—', ARR = '→';
 const STATE_MAP = {
   online:   { cls: 'online', txt: 'RUNNING' },
@@ -10,16 +7,15 @@ const STATE_MAP = {
   idle:     { cls: 'idle',   txt: 'STOPPED' },
 };
 
-let SERVERS = [];          // list from API (each has live status merged)
-let current = null;        // current server id
-let mode = 'server';       // 'server' | 'remote'
+let SERVERS = [];
+let current = null;
+let mode = 'server';
 let CFG = { port: 8800, version: '1.0' };
-let ME = null;             // {name, role}
-let logSince = 0;          // console paging
-let pollTimer = null;      // overview/tree refresh
-let logTimer = null;       // console refresh
+let ME = null;
+let logSince = 0;
+let pollTimer = null;
+let logTimer = null;
 
-/* ---------------- api helper ---------------- */
 async function api(path, opts) {
   const r = await fetch('/api' + path, Object.assign({
     headers: { 'Content-Type': 'application/json' },
@@ -30,7 +26,6 @@ async function api(path, opts) {
   return data;
 }
 
-/* ---------------- format helpers ---------------- */
 function fmtUp(s) {
   if (!s) return DASH;
   const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
@@ -41,9 +36,6 @@ function fmtUp(s) {
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function srv(id) { return SERVERS.find(s => s.id === id); }
 
-/* ============================================================
-   BOOT + AUTH
-   ============================================================ */
 async function boot() {
   const st = await api('/state');
   CFG.port = st.port; CFG.version = st.version;
@@ -105,16 +97,12 @@ function enterApp() {
   pollTimer = setInterval(tick, 2000);
 }
 
-/* ============================================================
-   DATA REFRESH
-   ============================================================ */
 async function refresh() {
   SERVERS = await api('/servers');
   renderTree();
 }
 
 async function tick() {
-  // light refresh of status while app is open
   try { SERVERS = await api('/servers'); } catch (e) { return; }
   renderTree();
   if (mode === 'server' && current) {
@@ -123,9 +111,6 @@ async function tick() {
   }
 }
 
-/* ============================================================
-   SIDEBAR TREE (grouped by folder)
-   ============================================================ */
 function folders() {
   const map = {};
   SERVERS.forEach(s => { (map[s.folder] = map[s.folder] || []).push(s); });
@@ -160,9 +145,6 @@ function filterTree(q) {
   });
 }
 
-/* ============================================================
-   MODE SWITCHING
-   ============================================================ */
 function showServer(id) {
   mode = 'server'; current = id;
   document.getElementById('hdrServer').style.display = '';
@@ -204,9 +186,6 @@ function showRemote() {
   paintRemote();
 }
 
-/* ============================================================
-   PAINT SERVER DETAIL
-   ============================================================ */
 function paintServer(id) {
   const s = srv(id); if (!s) return;
   document.getElementById('srvPill').style.display = '';
@@ -219,7 +198,6 @@ function paintServer(id) {
   document.getElementById('termTitle').textContent = s.name + ' ' + MID + ' stdout/stderr';
   document.getElementById('termPmt').textContent = s.name + ' $';
 
-  // settings form
   document.getElementById('setCmd').value = s.cmd || '';
   document.getElementById('setCwd').value = s.cwd || '';
   document.getElementById('setPort').value = s.port || '';
@@ -231,7 +209,6 @@ function paintServer(id) {
 
   paintLive(s);
   renderActivity(s);
-  // reset console paging + load
   logSince = 0; document.getElementById('term').innerHTML = '';
   loadLogs();
 }
@@ -257,7 +234,6 @@ function paintLive(s) {
   document.getElementById('stateBar').style.width = s.state === 'online' ? '100%' : (s.state === 'crash' ? '100%' : '0%');
   document.getElementById('stateBar').parentElement.classList.toggle('mem', s.state === 'crash');
 
-  // stop/start button
   const stop = document.getElementById('btnStop');
   if (s.state === 'idle' || s.state === 'crash') {
     stop.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l16 9-16 9z"/></svg>Start';
@@ -285,9 +261,6 @@ function renderActivity(s) {
     '<div class="tx">' + e[1] + '</div><div class="ts">' + e[2] + '</div></div>').join('');
 }
 
-/* ============================================================
-   CONSOLE (poll logs)
-   ============================================================ */
 async function loadLogs() {
   if (!current) return;
   try {
@@ -313,9 +286,6 @@ async function clearConsole() {
   loadLogs();
 }
 
-/* ============================================================
-   TABS / PAGES
-   ============================================================ */
 function goPage(name) {
   document.querySelectorAll('.panel-page').forEach(p => p.classList.toggle('show', p.dataset.page === name));
   if (name === 'console') {
@@ -339,9 +309,6 @@ document.getElementById('setBackoff').addEventListener('click', e => {
   b.classList.add('on');
 });
 
-/* ============================================================
-   SERVER CONTROLS
-   ============================================================ */
 async function ctlToggle() {
   const s = srv(current); if (!s) return;
   const action = (s.state === 'idle' || s.state === 'crash') ? 'start' : 'stop';
@@ -355,9 +322,6 @@ async function ctlRestart() {
   setTimeout(tick, 500);
 }
 
-/* ============================================================
-   SETTINGS
-   ============================================================ */
 function renderEnv(env) {
   const wrap = document.getElementById('envList');
   const keys = Object.keys(env);
@@ -407,9 +371,6 @@ async function deleteServer() {
   if (SERVERS.length) showServer(SERVERS[0].id); else showEmpty();
 }
 
-/* ============================================================
-   ADD SERVER MODAL
-   ============================================================ */
 function openModal() { document.getElementById('mErr').textContent = ''; document.getElementById('scrim').classList.add('show'); document.getElementById('mName').focus(); }
 function closeModal() { document.getElementById('scrim').classList.remove('show'); }
 document.getElementById('scrim').addEventListener('click', e => { if (e.target.id === 'scrim') closeModal(); });
@@ -438,16 +399,12 @@ async function createServer() {
   } catch (ex) { err.textContent = ex.message; }
 }
 
-/* ============================================================
-   REMOTE ACCESS + USERS
-   ============================================================ */
 function paintRemote() {
   document.getElementById('raPort').textContent = CFG.port;
   document.getElementById('raMetaPort').textContent = CFG.port;
   document.getElementById('cfgPort').value = CFG.port;
   document.getElementById('fwCmd').textContent =
     'netsh advfirewall firewall add rule name="ServerManager" dir=in action=allow protocol=TCP localport=' + CFG.port;
-  // hide add-user row for non-admins
   const isAdmin = ME && ME.role === 'admin';
   document.getElementById('addUserRow').style.display = isAdmin ? '' : 'none';
   loadUsers();
@@ -497,9 +454,6 @@ async function savePort() {
   toast('Saved — restart the app to apply port ' + p);
 }
 
-/* ============================================================
-   TOAST
-   ============================================================ */
 let toastTimer = null;
 function toast(msg) {
   let t = document.getElementById('toast');
@@ -509,9 +463,6 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-/* ============================================================
-   GO
-   ============================================================ */
 boot().catch(e => {
   document.getElementById('auth').style.display = 'flex';
   document.getElementById('loginErr').textContent = 'Cannot reach panel server: ' + e.message;

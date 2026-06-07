@@ -1,12 +1,8 @@
-/* ============================================================
-   processManager.js — spawn & supervise real Node processes
-   ============================================================ */
 const { spawn } = require('child_process');
 const pidusage = require('pidusage');
 
 const MAX_LOG = 500;
 
-/* runtime state, keyed by server id (not persisted) */
 const RT = new Map();
 
 function rt(id) {
@@ -14,10 +10,10 @@ function rt(id) {
     RT.set(id, {
       child: null,
       pid: null,
-      state: 'idle',      // idle | online | crash | stopping
+      state: 'idle',
       startedAt: 0,
       restarts: 0,
-      logs: [],           // {t, lv, msg}
+      logs: [],
       stats: { cpu: 0, mem: 0 },
       manualStop: false,
       backoffCount: 0,
@@ -55,7 +51,6 @@ function start(server) {
 
   let child;
   try {
-    // shell:true lets us run "npm start", "node x.js", etc. cross-platform
     child = spawn(server.cmd, {
       cwd,
       env,
@@ -99,7 +94,6 @@ function start(server) {
     r.state = 'crash';
     pushLog(server.id, 'err', 'process exited with code ' + code + (signal ? ' · ' + signal : ''));
 
-    // auto-restart with backoff
     if (server.autoRestart) {
       const limit = server.backoff === '∞' ? Infinity : (parseInt(server.backoff, 10) || 5);
       if (r.backoffCount < limit) {
@@ -127,7 +121,6 @@ function stop(serverId) {
   const pid = r.pid;
   try {
     if (process.platform === 'win32') {
-      // kill the whole process tree (shell + child)
       spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true });
     } else {
       r.child.kill('SIGTERM');
@@ -151,7 +144,6 @@ function restart(server) {
       if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true });
       else r.child.kill('SIGTERM');
     } catch (e) {}
-    // wait for exit then start
     const wait = setInterval(() => {
       if (!r.child) { clearInterval(wait); start(server); }
     }, 200);
@@ -170,7 +162,6 @@ async function refreshStats() {
       const r = rt(id);
       r.stats = { cpu: +s.cpu.toFixed(1), mem: Math.round(s.memory / 1048576) };
     } catch (e) {
-      // process likely gone between checks
       rt(id).stats = { cpu: 0, mem: 0 };
     }
   }));
