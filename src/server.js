@@ -9,6 +9,30 @@ const pm = require('./processManager');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
 
+function buildTunnelCmd(t) {
+  if (!t) return 'cloudflared tunnel --url http://localhost:3000';
+  const url = (t.url || 'http://localhost:3000').trim();
+  const parts = ['cloudflared', 'tunnel', '--no-autoupdate', '--url', url];
+  if (t.domainEnabled && t.domain && t.domain.trim()) {
+    parts.push('--hostname', t.domain.trim());
+  }
+  return parts.join(' ');
+}
+
+function applyTunnelDefaults(body) {
+  if (body.type !== 'tunnel') return body;
+  const t = body.tunnel || {};
+  body.tunnel = {
+    provider: t.provider || 'cloudflare',
+    url: (t.url || '').trim(),
+    domainEnabled: !!t.domainEnabled,
+    domain: (t.domain || '').trim(),
+  };
+  body.cmd = buildTunnelCmd(body.tunnel);
+  body.folder = body.folder || 'Tunnels';
+  return body;
+}
+
 function buildApp() {
   const app = express();
   app.use(express.json());
@@ -96,7 +120,12 @@ function buildApp() {
   app.put('/api/config', requireAuth, requireAdmin, (req, res) => {
     const patch = {};
     if (req.body.port) patch.port = parseInt(req.body.port, 10) || store.getConfig().port;
-    res.json(store.setConfig(patch));
+    if (typeof req.body.autoLaunch === 'boolean') patch.autoLaunch = req.body.autoLaunch;
+    const cfg = store.setConfig(patch);
+    if (typeof req.body.autoLaunch === 'boolean' && global.__applyAutoLaunch) {
+      try { global.__applyAutoLaunch(cfg.autoLaunch); } catch (e) {}
+    }
+    res.json(cfg);
   });
 
   const withStatus = s => Object.assign({}, s, pm.status(s.id));
@@ -105,14 +134,27 @@ function buildApp() {
     res.json(store.getServers().map(withStatus));
   });
   app.post('/api/servers', requireAuth, (req, res) => {
-    const { name } = req.body || {};
-    if (!name || !name.trim()) return res.status(400).json({ error: 'server name required' });
-    const srv = store.addServer(req.body);
+    const body = req.body || {};
+    if (!body.name || !body.name.trim()) return res.status(400).json({ error: 'server name required' });
+    const srv = store.addServer(applyTunnelDefaults(body));
     res.json(withStatus(srv));
   });
   app.put('/api/servers/:id', requireAuth, (req, res) => {
-    const s = store.updateServer(req.params.id, req.body || {});
-    if (!s) return res.status(404).json({ error: 'not found' });
+    const existing = store.getServer(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'not found' });
+    const body = req.body || {};
+    if (existing.type === 'tunnel' || body.type === 'tunnel') {
+      body.type = 'tunnel';
+      const t = Object.assign({}, existing.tunnel || {}, body.tunnel || {});
+      body.tunnel = {
+        provider: t.provider || 'cloudflare',
+        url: (t.url || '').trim(),
+        domainEnabled: !!t.domainEnabled,
+        domain: (t.domain || '').trim(),
+      };
+      body.cmd = buildTunnelCmd(body.tunnel);
+    }
+    const s = store.updateServer(req.params.id, body);
     res.json(withStatus(s));
   });
   app.delete('/api/servers/:id', requireAuth, (req, res) => {
@@ -140,6 +182,17 @@ function buildApp() {
   app.post('/api/servers/:id/logs/clear', requireAuth, (req, res) => {
     pm.clearLogs(req.params.id);
     res.json({ ok: true });
+  });
+  app.post('/api/servers/:id/input', requireAuth, (req, res) => {
+    res.json(pm.write(req.params.id, (req.body && req.body.text) || ''));
+  });
+  app.post('/api/servers/:id/connected', requireAuth, (req, res) => {
+    res.json(pm.markConnected(req.params.id));
+  });
+
+  app.get('/api/dashboard', requireAuth, (req, res) => {
+    const range = ['today', 'week', 'month'].includes(req.query.range) ? req.query.range : 'today';
+    res.json(pm.dashboard(range, store.getServers().length));
   });
 
   app.use(express.static(PUBLIC));

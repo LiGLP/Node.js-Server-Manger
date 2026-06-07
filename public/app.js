@@ -15,6 +15,9 @@ let ME = null;
 let logSince = 0;
 let pollTimer = null;
 let logTimer = null;
+let dashTimer = null;
+let dashRange = 'today';
+let createType = 'server';
 
 async function api(path, opts) {
   const r = await fetch('/api' + path, Object.assign({
@@ -145,12 +148,19 @@ function filterTree(q) {
   });
 }
 
+function clearNav() {
+  document.getElementById('raNav').classList.remove('active');
+  document.getElementById('dashNav').classList.remove('active');
+}
+
 function showServer(id) {
   mode = 'server'; current = id;
+  clearInterval(dashTimer);
   document.getElementById('hdrServer').style.display = '';
   document.getElementById('hdrRemote').style.display = 'none';
+  document.getElementById('hdrDashboard').style.display = 'none';
   document.getElementById('serverTabs').style.display = '';
-  document.getElementById('raNav').classList.remove('active');
+  clearNav();
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('overviewBody').style.display = '';
   goTab('overview');
@@ -158,14 +168,96 @@ function showServer(id) {
   paintServer(id);
 }
 
+function showDashboard() {
+  mode = 'dashboard';
+  document.getElementById('hdrServer').style.display = 'none';
+  document.getElementById('hdrRemote').style.display = 'none';
+  document.getElementById('hdrDashboard').style.display = '';
+  document.getElementById('serverTabs').style.display = 'none';
+  clearNav();
+  document.getElementById('dashNav').classList.add('active');
+  document.querySelectorAll('.srv').forEach(e => e.classList.remove('active'));
+  goPage('dashboard');
+  loadDashboard();
+  clearInterval(dashTimer);
+  dashTimer = setInterval(loadDashboard, 3000);
+}
+
+async function loadDashboard() {
+  let d;
+  try { d = await api('/dashboard?range=' + dashRange); } catch (e) { return; }
+  const s = d.summary;
+  document.getElementById('dashCount').textContent = s.servers + (s.servers === 1 ? ' SERVICE' : ' SERVICES');
+  document.getElementById('dUptime').innerHTML = s.uptimePct + '<small>%</small>';
+  document.getElementById('dUptimeSub').textContent = s.points ? 'across ' + s.servers + ' service' + (s.servers === 1 ? '' : 's') : 'no samples yet';
+  document.getElementById('dCpu').innerHTML = s.avgCpu + '<small>%</small>';
+  document.getElementById('dCpuSub').textContent = 'now ' + s.cpu + '% · avg in range';
+  document.getElementById('dMem').innerHTML = s.avgMem + '<small>MB</small>';
+  document.getElementById('dMemSub').textContent = 'now ' + s.mem + ' MB · peak ' + s.peakMem;
+  document.getElementById('dOnline').innerHTML = s.online + '<small>/' + s.servers + '</small>';
+  document.getElementById('dRangeLbl').textContent = { today: 'today', week: 'last week', month: 'last month' }[d.range];
+
+  drawChart(d.series);
+  renderDashList();
+}
+
+function drawChart(series) {
+  const svg = document.getElementById('dChart');
+  const empty = document.getElementById('dChartEmpty');
+  if (!series || series.length < 2) { svg.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  const W = 600, H = 160;
+  const n = series.length;
+  const maxCpu = Math.max(1, ...series.map(p => p.cpu));
+  const maxMem = Math.max(1, ...series.map(p => p.mem));
+  const x = i => (i / (n - 1)) * W;
+  const line = (key, max) => series.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + (H - (p[key] / max) * (H - 12) - 4).toFixed(1)).join(' ');
+  const area = (key, max) => 'M0 ' + H + ' ' + series.map((p, i) => 'L' + x(i).toFixed(1) + ' ' + (H - (p[key] / max) * (H - 12) - 4).toFixed(1)).join(' ') + ' L' + W + ' ' + H + ' Z';
+  svg.innerHTML =
+    '<defs><linearGradient id="cpuG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5eead4" stop-opacity=".25"/><stop offset="1" stop-color="#5eead4" stop-opacity="0"/></linearGradient></defs>' +
+    '<path d="' + area('cpu', maxCpu) + '" fill="url(#cpuG)"/>' +
+    '<path d="' + line('cpu', maxCpu) + '" fill="none" stroke="#5eead4" stroke-width="2" vector-effect="non-scaling-stroke"/>' +
+    '<path d="' + line('mem', maxMem) + '" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>';
+}
+
+function renderDashList() {
+  document.getElementById('dSvcCount').textContent = SERVERS.length;
+  const rows = SERVERS.map(s => {
+    const sm = STATE_MAP[s.state] || STATE_MAP.idle;
+    const isTun = s.type === 'tunnel';
+    const sub = isTun ? (s.tunnelUrl || (s.tunnel && s.tunnel.domain) || 'tunnel') : (s.port ? 'localhost:' + s.port : s.cmd);
+    return '<div class="trow urow" style="cursor:pointer" onclick="showServer(\'' + s.id + '\')">' +
+      '<span class="dot ' + sm.cls + '" style="margin:0 2px"></span>' +
+      '<div class="url"><b style="color:var(--ink)">' + esc(s.name) + '</b>' +
+        (isTun ? '<span class="tag-mini">tunnel</span>' : '') +
+        '<span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(sub) + '</span></div>' +
+      '<div class="stat-tag" style="color:var(--' + (s.state === 'online' ? 'online' : s.state === 'crash' ? 'crash' : 'ink-3') + ')">' + sm.txt.toLowerCase() + '</div>' +
+      '<div class="reqs">' + (s.state === 'online' ? fmtUp(s.uptime) : DASH) + '</div>' +
+      '<div class="reqs" style="width:54px">' + (s.cpu || 0) + '%</div>' +
+      '<div class="reqs" style="width:64px">' + (s.mem || 0) + 'MB</div>' +
+      '</div>';
+  }).join('');
+  document.getElementById('dashList').innerHTML = rows || '<div style="padding:20px;text-align:center;color:var(--ink-4);font-size:13px">No services yet.</div>';
+}
+
+document.getElementById('dashRange').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#dashRange button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  dashRange = b.dataset.r;
+  loadDashboard();
+});
+
 function backToServer() {
   if (current) showServer(current);
-  else { mode = 'server'; document.getElementById('hdrRemote').style.display = 'none'; document.getElementById('hdrServer').style.display = ''; document.getElementById('serverTabs').style.display = ''; showEmpty(); }
+  else { mode = 'server'; document.getElementById('hdrRemote').style.display = 'none'; document.getElementById('hdrDashboard').style.display = 'none'; document.getElementById('hdrServer').style.display = ''; document.getElementById('serverTabs').style.display = ''; showEmpty(); }
 }
 
 function showEmpty() {
+  clearInterval(dashTimer);
   document.getElementById('hdrServer').style.display = '';
   document.getElementById('hdrRemote').style.display = 'none';
+  document.getElementById('hdrDashboard').style.display = 'none';
   document.getElementById('serverTabs').style.display = 'none';
   document.getElementById('srvName').textContent = 'No server selected';
   document.getElementById('srvCrumb').textContent = '';
@@ -177,9 +269,12 @@ function showEmpty() {
 
 function showRemote() {
   mode = 'remote';
+  clearInterval(dashTimer);
   document.getElementById('hdrServer').style.display = 'none';
   document.getElementById('hdrRemote').style.display = '';
+  document.getElementById('hdrDashboard').style.display = 'none';
   document.getElementById('serverTabs').style.display = 'none';
+  clearNav();
   document.getElementById('raNav').classList.add('active');
   document.querySelectorAll('.srv').forEach(e => e.classList.remove('active'));
   goPage('remote');
@@ -242,6 +337,11 @@ function paintLive(s) {
     stop.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop';
     stop.classList.add('stop'); stop.classList.remove('go');
   }
+
+  if (s.type === 'tunnel' && s.tunnelUrl) {
+    document.getElementById('procPort').textContent = s.tunnelUrl.replace(/^https?:\/\//, '');
+  }
+  paintConsole(s);
 }
 
 function renderActivity(s) {
@@ -278,6 +378,48 @@ async function loadLogs() {
 }
 function lvLabel(lv) {
   return { info: 'INFO', err: 'ERR', ok: 'OK', warn: 'WARN' }[lv] || lv.toUpperCase();
+}
+
+function paintConsole(s) {
+  const input = document.getElementById('termIn');
+  const bar = document.getElementById('connectBar');
+  const cbText = document.getElementById('cbText');
+  const isTun = s.type === 'tunnel';
+  const live = s.state === 'online';
+  const open = isTun && live && !s.tunnelConnected;
+
+  if (open) {
+    input.disabled = false;
+    input.placeholder = 'type to send input to cloudflared, then press Enter…';
+    bar.style.display = '';
+    cbText.textContent = s.tunnelUrl ? 'Tunnel reachable at ' + s.tunnelUrl : 'Waiting for Cloudflare to connect…';
+  } else {
+    input.disabled = true;
+    input.value = '';
+    bar.style.display = 'none';
+    if (isTun && s.tunnelConnected) {
+      input.placeholder = 'cloudflare connected — console locked';
+    } else {
+      input.placeholder = 'console is read-only — stdout/stderr of the process';
+    }
+  }
+}
+
+async function termInput(e) {
+  if (e.key !== 'Enter') return;
+  const input = document.getElementById('termIn');
+  const text = input.value;
+  if (!text.trim() || !current) return;
+  input.value = '';
+  try { await api('/servers/' + current + '/input', { method: 'POST', body: JSON.stringify({ text }) }); }
+  catch (ex) { toast(ex.message); }
+  setTimeout(loadLogs, 200);
+}
+
+async function markConnected() {
+  if (!current) return;
+  await api('/servers/' + current + '/connected', { method: 'POST' });
+  setTimeout(tick, 300);
 }
 async function clearConsole() {
   if (!current) return;
@@ -371,31 +513,101 @@ async function deleteServer() {
   if (SERVERS.length) showServer(SERVERS[0].id); else showEmpty();
 }
 
-function openModal() { document.getElementById('mErr').textContent = ''; document.getElementById('scrim').classList.add('show'); document.getElementById('mName').focus(); }
+function openModal() {
+  document.getElementById('mErr').textContent = '';
+  setCreateType('server');
+  document.getElementById('scrim').classList.add('show');
+  document.getElementById('mName').focus();
+}
 function closeModal() { document.getElementById('scrim').classList.remove('show'); }
 document.getElementById('scrim').addEventListener('click', e => { if (e.target.id === 'scrim') closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+function setCreateType(t) {
+  createType = t;
+  document.querySelectorAll('#mType button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  const tun = t === 'tunnel';
+  document.getElementById('serverFields').style.display = tun ? 'none' : '';
+  document.getElementById('tunnelFields').style.display = tun ? '' : 'none';
+  document.getElementById('mTitle').textContent = tun ? 'Add a Cloudflare tunnel' : 'Add a Node server';
+  document.getElementById('mLead').textContent = tun ? 'Expose a local port to the internet.' : 'Point the manager at a project directory and start command.';
+  document.getElementById('mNameLbl').textContent = tun ? 'Tunnel name' : 'Server name';
+  document.getElementById('mName').placeholder = tun ? 'my-tunnel' : 'my-service';
+  document.getElementById('mCreateBtn').textContent = tun ? 'Create tunnel' : 'Create server';
+  document.getElementById('mStartDesc').textContent = tun ? 'Open the tunnel as soon as it\'s added.' : 'Boot the process as soon as it\'s added.';
+  if (tun) updateTunPreview();
+}
+
+function pickProvider(el) {
+  if (el.classList.contains('soon')) return;
+  document.querySelectorAll('.prov').forEach(p => p.classList.remove('on'));
+  el.classList.add('on');
+}
+
+function toggleTunDomain(el) {
+  el.classList.toggle('on');
+  document.getElementById('mTunDomainField').style.display = el.classList.contains('on') ? '' : 'none';
+  updateTunPreview();
+}
+
+function tunnelBody() {
+  const domEl = document.getElementById('mTunDomainTog');
+  return {
+    provider: 'cloudflare',
+    url: document.getElementById('mTunUrl').value.trim(),
+    domainEnabled: domEl.classList.contains('on'),
+    domain: document.getElementById('mTunDomain').value.trim(),
+  };
+}
+
+function buildTunPreview(t) {
+  const url = t.url || 'http://localhost:3000';
+  let cmd = 'cloudflared tunnel --no-autoupdate --url ' + url;
+  if (t.domainEnabled && t.domain) cmd += ' --hostname ' + t.domain;
+  return cmd;
+}
+function updateTunPreview() {
+  document.getElementById('mTunPreview').textContent = buildTunPreview(tunnelBody());
+}
+
 async function createServer() {
   const err = document.getElementById('mErr'); err.textContent = '';
-  const body = {
-    name: document.getElementById('mName').value.trim(),
-    folder: document.getElementById('mFolder').value.trim() || 'Default',
-    port: document.getElementById('mPort').value.trim(),
-    cwd: document.getElementById('mCwd').value.trim(),
-    cmd: document.getElementById('mCmd').value.trim() || 'npm start',
-    autoRestart: document.getElementById('mAuto').classList.contains('on'),
-  };
-  if (!body.name) { err.textContent = 'server name required'; return; }
+  const name = document.getElementById('mName').value.trim();
+  if (!name) { err.textContent = (createType === 'tunnel' ? 'tunnel' : 'server') + ' name required'; return; }
+
+  let body;
+  if (createType === 'tunnel') {
+    const t = tunnelBody();
+    if (t.domainEnabled && !t.domain) { err.textContent = 'enter a domain or turn off custom domain'; return; }
+    body = {
+      type: 'tunnel',
+      name,
+      folder: 'Tunnels',
+      autoRestart: document.getElementById('mAuto').classList.contains('on'),
+      tunnel: t,
+    };
+  } else {
+    body = {
+      type: 'server',
+      name,
+      folder: document.getElementById('mFolder').value.trim() || 'Default',
+      port: document.getElementById('mPort').value.trim(),
+      cwd: document.getElementById('mCwd').value.trim(),
+      cmd: document.getElementById('mCmd').value.trim() || 'npm start',
+      autoRestart: document.getElementById('mAuto').classList.contains('on'),
+    };
+  }
+
   try {
     const s = await api('/servers', { method: 'POST', body: JSON.stringify(body) });
     if (document.getElementById('mStart').classList.contains('on')) {
       await api('/servers/' + s.id + '/start', { method: 'POST' });
     }
     closeModal();
-    ['mName', 'mPort', 'mCwd'].forEach(i => document.getElementById(i).value = '');
+    ['mName', 'mPort', 'mCwd', 'mTunUrl', 'mTunDomain'].forEach(i => document.getElementById(i).value = '');
     await refresh();
     showServer(s.id);
+    if (document.getElementById('mStart').classList.contains('on')) goTab('console');
   } catch (ex) { err.textContent = ex.message; }
 }
 
@@ -408,6 +620,18 @@ function paintRemote() {
   const isAdmin = ME && ME.role === 'admin';
   document.getElementById('addUserRow').style.display = isAdmin ? '' : 'none';
   loadUsers();
+  api('/config').then(cfg => {
+    document.getElementById('cfgAutoLaunch').classList.toggle('on', !!cfg.autoLaunch);
+  }).catch(() => {});
+}
+
+async function toggleAutoLaunch(el) {
+  if (!(ME && ME.role === 'admin')) { toast('Admin only'); return; }
+  const next = !el.classList.contains('on');
+  el.classList.toggle('on', next);
+  try { await api('/config', { method: 'PUT', body: JSON.stringify({ autoLaunch: next }) });
+    toast(next ? 'Launch on system start enabled' : 'Launch on system start disabled');
+  } catch (ex) { el.classList.toggle('on', !next); toast(ex.message); }
 }
 
 async function loadUsers() {

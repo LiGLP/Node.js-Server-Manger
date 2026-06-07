@@ -532,3 +532,70 @@ input,select{font-family:inherit}
   padding:10px 18px;border-radius:10px;font-size:13px;z-index:300;opacity:0;
   box-shadow:0 18px 40px -18px #000;transition:opacity .2s,transform .2s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ============================================================
+   v1.1 — tunnels, dashboard, startup, repo links
+   ============================================================ */
+
+/* --- repo links --- */
+.auth-foot{margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);display:flex;justify-content:center}
+.auth-foot a{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-3);text-decoration:none;transition:.14s}
+.auth-foot a:hover{color:var(--acc)}
+.auth-foot svg{width:15px;height:15px}
+.repo-foot{display:flex;align-items:center;gap:12px;margin-top:18px;padding:14px 4px 6px;border-top:1px solid var(--line-soft)}
+.repo-foot a{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-family:var(--mono);color:var(--ink-2);text-decoration:none;transition:.14s}
+.repo-foot a:hover{color:var(--acc)}
+.repo-foot a svg{width:16px;height:16px}
+.repo-foot span{margin-left:auto;font-size:11px;font-family:var(--mono);color:var(--ink-4)}
+
+/* --- create-type switch --- */
+.type-seg{display:flex;gap:5px;background:#0c1015;border:1px solid var(--line);border-radius:var(--r-sm);padding:4px;margin-bottom:16px}
+.type-seg button{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:8px;
+  font-size:13px;font-weight:600;color:var(--ink-3);transition:.14s}
+.type-seg button svg{width:15px;height:15px}
+.type-seg button.on{background:var(--raised);color:var(--ink);box-shadow:inset 0 0 0 1px rgba(94,234,212,.16)}
+.type-seg button.on svg{color:var(--acc)}
+
+/* --- provider picker --- */
+.grp-lbl{display:block;font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em;margin:4px 0 9px}
+.prov-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.prov{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;cursor:pointer;transition:.14s}
+.prov:hover{border-color:#303c4b}
+.prov.on{border-color:var(--acc-deep);box-shadow:0 0 0 3px var(--acc-glow);background:linear-gradient(180deg,rgba(94,234,212,.05),transparent)}
+.prov-i{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--raised);border:1px solid var(--line);color:var(--acc);margin-bottom:10px}
+.prov-i svg{width:17px;height:17px}
+.prov-t{font-size:13.5px;font-weight:600;margin-bottom:3px}
+.prov-d{font-size:11.5px;color:var(--ink-4);line-height:1.4}
+.prov-check{position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:50%;background:var(--acc-deep);
+  display:none;place-items:center;color:#04201b}
+.prov-check svg{width:12px;height:12px}
+.prov.on .prov-check{display:grid}
+.prov.soon{cursor:default;opacity:.55}
+.prov.soon:hover{border-color:var(--line)}
+
+.cmd-prev{background:#070a0d;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 13px;overflow-x:auto}
+.cmd-prev code{font-family:var(--mono);font-size:12px;color:var(--acc);white-space:nowrap}
+
+/* --- console connect bar + input --- */
+.connect-bar{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--line-soft);
+  background:rgba(251,191,36,.06)}
+.connect-bar .cb-msg{display:flex;align-items:center;gap:9px;font-size:12.5px;color:#e9d8a6;flex:1;font-family:var(--mono)}
+.connect-bar .cb-dot{width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 3px rgba(251,191,36,.16);
+  animation:pulse 1.6s infinite;flex:none}
+.cb-btn{padding:8px 14px;border-radius:var(--r-sm);font-size:12.5px;font-weight:600;background:var(--acc);color:#04201b;flex:none}
+.cb-btn:hover{background:#7df0dd}
+.term-input input:not(:disabled){color:var(--ink)}
+.term-input input:not(:disabled)::placeholder{color:var(--ink-4)}
+
+/* --- dashboard --- */
+.chart-leg{display:flex;gap:18px;margin-bottom:12px;font-size:11.5px;color:var(--ink-3);font-family:var(--mono)}
+.chart-leg span{display:inline-flex;align-items:center;gap:7px}
+.chart-leg i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.chart-leg i.cpu{background:var(--acc)}
+.chart-leg i.mem{background:var(--violet)}
+.chart{width:100%;height:160px;display:block;overflow:visible}
+.chart-empty{padding:30px 10px;text-align:center;color:var(--ink-4);font-size:12.5px;font-family:var(--mono)}
+.tag-mini{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--acc);background:rgba(94,234,212,.08);border:1px solid rgba(94,234,212,.2);padding:1px 6px;border-radius:5px;flex:none}
+#dashList .url{display:flex;align-items:center;gap:9px}
+#dashRange.seg button,#dashRange.seg{font-family:var(--sans)}

@@ -54,10 +54,12 @@ const id = () => crypto.randomBytes(6).toString('hex');
 function getServers() { return db.servers; }
 function getServer(sid) { return db.servers.find(s => s.id === sid); }
 function addServer(s) {
+  const type = s.type === 'tunnel' ? 'tunnel' : 'server';
   const srv = {
     id: id(),
+    type,
     name: s.name,
-    folder: s.folder || 'Default',
+    folder: s.folder || (type === 'tunnel' ? 'Tunnels' : 'Default'),
     cwd: s.cwd || '',
     cmd: s.cmd || 'npm start',
     port: s.port || '',
@@ -66,6 +68,7 @@ function addServer(s) {
     startOnBoot: !!s.startOnBoot,
     backoff: s.backoff || 5,
     env: s.env || {},
+    tunnel: type === 'tunnel' ? (s.tunnel || null) : null,
     createdAt: Date.now(),
   };
   db.servers.push(srv);

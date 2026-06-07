@@ -36,9 +36,33 @@ function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
+function applyAutoLaunch(enabled) {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: !!enabled,
+      path: process.execPath,
+      args: [],
+    });
+  } catch (e) {}
+}
+
+function autoStartServers() {
+  try {
+    store.getServers().forEach(s => {
+      if (s.startOnBoot) {
+        setTimeout(() => { try { pm.start(s); } catch (e) {} }, 600);
+      }
+    });
+  } catch (e) {}
+}
+
 app.whenReady().then(() => {
   store.init(path.join(app.getPath('userData'), 'data'));
-  PORT = store.getConfig().port || 8800;
+  const cfg = store.getConfig();
+  PORT = cfg.port || 8800;
+
+  global.__applyAutoLaunch = applyAutoLaunch;
+  applyAutoLaunch(cfg.autoLaunch);
 
   try {
     httpServer = startServer(PORT);
@@ -53,6 +77,7 @@ app.whenReady().then(() => {
     dialog.showErrorBox('Startup error', e.message);
   }
 
+  autoStartServers();
   createWindow();
 
   app.on('activate', () => {

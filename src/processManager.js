@@ -2,8 +2,11 @@ const { spawn } = require('child_process');
 const pidusage = require('pidusage');
 
 const MAX_LOG = 500;
+const MAX_HISTORY = 5760;
+const MAX_GLOBAL = 8000;
 
 const RT = new Map();
+const GLOBAL_HISTORY = [];
 
 function rt(id) {
   if (!RT.has(id)) {
@@ -17,9 +20,27 @@ function rt(id) {
       stats: { cpu: 0, mem: 0 },
       manualStop: false,
       backoffCount: 0,
+      history: [],
+      tunnelConnected: false,
+      tunnelUrl: '',
     });
   }
   return RT.get(id);
+}
+
+const TRY_RE = /(https?:\/\/[a-z0-9-]+\.trycloudflare\.com)/i;
+const HOST_RE = /\|\s+(https?:\/\/[^\s|]+)/i;
+
+function detectTunnelUrl(id, text) {
+  const r = rt(id);
+  if (r.tunnelUrl) return;
+  let m = text.match(TRY_RE);
+  if (!m) m = text.match(HOST_RE);
+  if (m) {
+    r.tunnelUrl = m[1];
+    r.tunnelConnected = true;
+    pushLog(id, 'ok', 'tunnel live · ' + r.tunnelUrl);
+  }
 }
 
 function pushLog(id, lv, msg) {
@@ -37,6 +58,7 @@ function stamp() {
 
 function feedLines(id, lv, chunk) {
   const text = chunk.toString();
+  detectTunnelUrl(id, text);
   text.split(/\r?\n/).forEach(l => { if (l.trim() !== '') pushLog(id, lv, l); });
 }
 
@@ -45,6 +67,8 @@ function start(server) {
   if (r.state === 'online' && r.child) return { ok: false, error: 'already running' };
 
   r.manualStop = false;
+  r.tunnelConnected = false;
+  r.tunnelUrl = '';
   const cwd = server.cwd && server.cwd.trim() ? server.cwd : process.cwd();
   const env = Object.assign({}, process.env, server.env || {});
   if (server.port) env.PORT = String(server.port);
@@ -165,6 +189,91 @@ async function refreshStats() {
       rt(id).stats = { cpu: 0, mem: 0 };
     }
   }));
+  sample();
+}
+
+function sample() {
+  const now = Date.now();
+  let cpu = 0, mem = 0, online = 0;
+  for (const [, r] of RT) {
+    const up = r.state === 'online';
+    const c = up ? r.stats.cpu : 0;
+    const m = up ? r.stats.mem : 0;
+    r.history.push({ t: now, cpu: c, mem: m, up: up ? 1 : 0 });
+    if (r.history.length > MAX_HISTORY) r.history.shift();
+    if (up) { cpu += c; mem += m; online++; }
+  }
+  GLOBAL_HISTORY.push({ t: now, cpu: +cpu.toFixed(1), mem, online });
+  if (GLOBAL_HISTORY.length > MAX_GLOBAL) GLOBAL_HISTORY.shift();
+}
+
+function write(serverId, text) {
+  const r = rt(serverId);
+  if (!r.child || !r.child.stdin || !r.child.stdin.writable)
+    return { ok: false, error: 'process not accepting input' };
+  try {
+    r.child.stdin.write(String(text).replace(/\r?\n$/, '') + '\n');
+    pushLog(serverId, 'info', '> ' + text);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function markConnected(serverId) {
+  rt(serverId).tunnelConnected = true;
+  pushLog(serverId, 'ok', 'marked as connected — console input locked');
+  return { ok: true };
+}
+
+function rangeStart(range) {
+  const now = new Date();
+  if (range === 'today') { now.setHours(0, 0, 0, 0); return now.getTime(); }
+  if (range === 'month') return Date.now() - 30 * 86400000;
+  return Date.now() - 7 * 86400000;
+}
+
+function dashboard(range, totalServers) {
+  const from = rangeStart(range);
+  const win = GLOBAL_HISTORY.filter(p => p.t >= from);
+  let cpu = 0, mem = 0, online = 0;
+  for (const [, r] of RT) if (r.state === 'online') { cpu += r.stats.cpu; mem += r.stats.mem; online++; }
+
+  let upSum = 0;
+  win.forEach(p => { upSum += p.online; });
+  const uptimePct = win.length ? Math.round((upSum / (win.length * Math.max(totalServers, 1))) * 100) : 0;
+  const avgCpu = win.length ? +(win.reduce((a, p) => a + p.cpu, 0) / win.length).toFixed(1) : 0;
+  const avgMem = win.length ? Math.round(win.reduce((a, p) => a + p.mem, 0) / win.length) : 0;
+  const peakMem = win.reduce((a, p) => Math.max(a, p.mem), 0);
+
+  const buckets = 60;
+  let series = win;
+  if (win.length > buckets) {
+    const size = Math.ceil(win.length / buckets);
+    series = [];
+    for (let i = 0; i < win.length; i += size) {
+      const slice = win.slice(i, i + size);
+      series.push({
+        t: slice[slice.length - 1].t,
+        cpu: +(slice.reduce((a, p) => a + p.cpu, 0) / slice.length).toFixed(1),
+        mem: Math.round(slice.reduce((a, p) => a + p.mem, 0) / slice.length),
+        online: Math.round(slice.reduce((a, p) => a + p.online, 0) / slice.length),
+      });
+    }
+  }
+
+  return {
+    range,
+    summary: {
+      servers: totalServers,
+      online,
+      cpu: +cpu.toFixed(1),
+      mem,
+      avgCpu, avgMem, peakMem, uptimePct,
+      points: win.length,
+    },
+    series,
+  };
 }
 
 function status(serverId) {
@@ -176,6 +285,8 @@ function status(serverId) {
     restarts: r.restarts,
     cpu: r.stats.cpu,
     mem: r.stats.mem,
+    tunnelConnected: r.tunnelConnected,
+    tunnelUrl: r.tunnelUrl,
   };
 }
 
@@ -190,4 +301,4 @@ function stopAll() {
   for (const [id, r] of RT) if (r.child) stop(id);
 }
 
-module.exports = { start, stop, restart, status, logs, clearLogs, refreshStats, stopAll };
+module.exports = { start, stop, restart, status, logs, clearLogs, refreshStats, stopAll, write, markConnected, dashboard, sample };
